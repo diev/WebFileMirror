@@ -46,7 +46,7 @@ namespace WebFileMirror
 
         private static void Crawler1(string uri, string path)
         {
-            /* HTML http://www.cbr.ru/explan/pcod/
+            /* HTML http://www.cbr.ru/explan/pcod/?tab.current=t2
             <div class="rubric_horizontal">
                 <div class="col-md-3 rubric_sub">1&nbsp;запрос</div>
                 <a class="col-md-19 offset-md-1 rubric_title" href="doc?number=40">Вопросы по Инструкции № 136-И</a>
@@ -173,7 +173,31 @@ namespace WebFileMirror
             }
             else
             {
-                throw new Exception($"HTML изменился - невозможно определить файл вопроса.");
+                m = new Regex(@"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)Q"">\s*Вопрос\s*и\s*ответ\s*<\/a>").Match(section);
+                if (m.Success)
+                {
+                    string url = "http://www.cbr.ru" + m.Result("${url}");
+                    urlQ = url + "Q";
+                    urlA = null;
+                    folder = m.Result("${folder}");
+                    file = m.Result("${file}");
+                }
+                else
+                {
+                    m = new Regex(@"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)A"">\s*Ответ\s*<\/a>").Match(section);
+                    if (m.Success)
+                    {
+                        string url = "http://www.cbr.ru" + m.Result("${url}");
+                        urlQ = null;
+                        urlA = url + "A";
+                        folder = m.Result("${folder}");
+                        file = m.Result("${file}");
+                    }
+                    else
+                    {
+                        throw new Exception($"HTML изменился в \"{title}\" - невозможно определить файл вопроса/ответа.");
+                    }
+                }
             }
 
             m = new Regex(@"Дата последнего обновления: (?<date>\d{2}\.\d{2}\.\d{4})").Match(section);
@@ -183,7 +207,7 @@ namespace WebFileMirror
             }
             else
             {
-                throw new Exception($"HTML изменился - невозможно определить дату последнего обновления.");
+                throw new Exception($"HTML изменился в \"{title}\" - невозможно определить дату последнего обновления.");
             }
 
             Console.WriteLine($"  {updated:yyyy-MM-dd}: {title}");
@@ -204,8 +228,8 @@ namespace WebFileMirror
             Ответ ДФМиВК от 16.04.2018 № 12-3-5/2688 на запрос КО
             Updated: 18.12.2018
 
-            Q: http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/Q
-            A: http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/A
+            Q: http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/Q (optional)
+            A: http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/A (optional)
             */
 
             File.WriteAllText(Path.Combine(path, item + ".info"), sb.ToString());
@@ -216,6 +240,11 @@ namespace WebFileMirror
 
         private static void StoreFile(string uri, string path)
         {
+            if (uri == null)
+            {
+                return;
+            }
+
             var info = new StringBuilder();
             var headers = GetHeaders(uri);
             string file = Path.Combine(path, GetFileName(headers["Content-Disposition"]));
