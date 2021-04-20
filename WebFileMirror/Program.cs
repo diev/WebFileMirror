@@ -33,6 +33,7 @@ namespace WebFileMirror
             var settings = ConfigurationManager.AppSettings;
             var uri = settings["Uri"];
             var mirror = settings["Mirror"];
+
             if (!Directory.Exists(mirror))
             {
                 Directory.CreateDirectory(mirror);
@@ -59,19 +60,25 @@ namespace WebFileMirror
             string start = "<h2 class=\"h3\">КО</h2>";
             string finish = "<h2 class=\"h3\">НФО</h2>";
 
-            int iStart = page.IndexOf(start) + start.Length;
-            int iFinish = page.IndexOf(finish);
-            string section = page.Substring(iStart, iFinish - iStart);
+            string section = GetSection(uri, page, start, finish);
 
-            var hrefs = new Regex(@"<a .*href=""(?<url>doc\?number=\d*)"">(?<title>.*)<\/a>");
+            string pattern = @"<a .*href=""(?<url>doc\?number=\d*)"">(?<title>.*)<\/a>";
+            var hrefs = new Regex(pattern);
+            var matches = hrefs.Matches(section);
 
-            foreach (Match m in hrefs.Matches(section))
+            if (matches.Count == 0)
+            {
+                throw new Exception($"HTML {uri} изменился - найдено 0 линков.");
+            }
+
+            foreach (Match m in matches)
             {
                 string url = m.Result("${url}");
                 string title = m.Result("${title}");
 
                 Console.WriteLine(title);
                 string dir = Path.Combine(path, title);
+
                 if (!Directory.Exists(dir))
                 {
                     Directory.CreateDirectory(dir);
@@ -83,7 +90,7 @@ namespace WebFileMirror
 
         private static void Crawler2(string uri, string path)
         {
-            /* HTML http://www.cbr.ru/explan/pcod/doc/?number=40
+            /* HTML http://www.cbr.ru/explan/pcod/doc?number=40
             <div class="dropdown question">...</div> */
 
             string page = GetPage(uri);
@@ -91,38 +98,29 @@ namespace WebFileMirror
             string start = "<div class=\"dropdown question\">";
             string finish = "<div class=\"page-info\">";
 
-            int iStart = page.IndexOf(start);
-            if (iStart == -1)
-            {
-                throw new Exception($"HTML страницы {uri} изменился - невозможно определить секции данных.");
-            }
+            string section = GetSection(uri, page, start, finish);
+            int iStart = 0;
 
-            bool next = true;
-            while (next)
+            bool isNext = true;
+            while (isNext)
             {
-                iStart += start.Length;
-                int iFinish = page.IndexOf(start, iStart);
+                int iFinish = section.IndexOf(start, iStart + start.Length);
                 if (iFinish == -1)
                 {
-                    iFinish = page.IndexOf(finish, iStart);
-                    if (iFinish == -1) // Last
-                    {
-                        iFinish = page.Length - 1;
-                    }
-
-                    next = false;
+                    isNext = false;
+                    iFinish = section.Length - 1;
                 }
 
-                string section = page.Substring(iStart, iFinish - iStart);
+                string subSection = section.Substring(iStart, iFinish - iStart);
                 iStart = iFinish;
 
-                Crawler3(section, path);
+                Crawler3(uri, subSection, path);
             }
         }
 
-        private static void Crawler3(string section, string path)
+        private static void Crawler3(string uri, string section, string path)
         {
-            /* HTML http://www.cbr.ru/explan/pcod/doc/?number=40
+            /* HTML http://www.cbr.ru/explan/pcod/doc?number=40
             <div class="dropdown question">
               <div class="dropdown_title">
                 <div class="question_num">02</div>
@@ -146,99 +144,76 @@ namespace WebFileMirror
               </div>
             </div> */
 
+            string num;
             string title;
             DateTime updated;
 
-            string urlQ, urlA;
-            string folder, file;
+            string url = "http://www.cbr.ru";
+            string urlQ = null;
+            string urlA = null;
 
-            Match m = new Regex(@"<div class=""question_title"">(?<title>.+)<\/div>").Match(section);
+            string pattern = @"<div class=""question_num"">(?<num>.+)<\/div>";
+            Match m = new Regex(pattern).Match(section);
+            if (m.Success)
+            {
+                num = m.Result("${num}");
+            }
+            else
+            {
+                throw new Exception($"HTML {uri} изменился - не определить номер вопроса.");
+            }
+
+            pattern = @"<div class=""question_title"">(?<title>.+)<\/div>";
+            m = new Regex(pattern).Match(section);
             if (m.Success)
             {
                 title = m.Result("${title}");
             }
             else
             {
-                throw new Exception($"HTML изменился - невозможно определить название документа.");
+                throw new Exception($"HTML {uri} изменился - не определить название вопроса {num}.");
             }
 
-            m = new Regex(@"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)Q"">\s*Вопрос\s*<\/a>").Match(section);
-            if (m.Success)
-            {
-                string url = "http://www.cbr.ru" + m.Result("${url}");
-                urlQ = url + "Q";
-                urlA = url + "A";
-                folder = m.Result("${folder}");
-                file = m.Result("${file}");
-            }
-            else
-            {
-                m = new Regex(@"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)Q"">\s*Вопрос\s*и\s*ответ\s*<\/a>").Match(section);
-                if (m.Success)
-                {
-                    string url = "http://www.cbr.ru" + m.Result("${url}");
-                    urlQ = url + "Q";
-                    urlA = null;
-                    folder = m.Result("${folder}");
-                    file = m.Result("${file}");
-                }
-                else
-                {
-                    m = new Regex(@"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)A"">\s*Ответ\s*<\/a>").Match(section);
-                    if (m.Success)
-                    {
-                        string url = "http://www.cbr.ru" + m.Result("${url}");
-                        urlQ = null;
-                        urlA = url + "A";
-                        folder = m.Result("${folder}");
-                        file = m.Result("${file}");
-                    }
-                    else
-                    {
-                        throw new Exception($"HTML изменился в \"{title}\" - невозможно определить файл вопроса/ответа.");
-                    }
-                }
-            }
-
-            m = new Regex(@"Дата последнего обновления: (?<date>\d{2}\.\d{2}\.\d{4})").Match(section);
+            pattern = @"Дата последнего обновления: (?<date>\d{2}\.\d{2}\.\d{4})";
+            m = new Regex(pattern).Match(section);
             if (m.Success)
             {
                 updated = DateTime.Parse(m.Result("${date}"));
             }
             else
             {
-                throw new Exception($"HTML изменился в \"{title}\" - невозможно определить дату последнего обновления.");
+                throw new Exception($"HTML {uri} изменился в {num} \"{title}\" - не определить дату последнего обновления.");
             }
 
-            Console.WriteLine($"  {updated:yyyy-MM-dd}: {title}");
-
-            string item = $"{folder}_{file}_{updated:yyyy-MM-dd}";
-            //path = Path.Combine(path, item);
             path = Path.Combine(path, $"{updated:yyyy-MM-dd} {GetValidFileName(title)}");
             Directory.CreateDirectory(path);
 
-            var sb = new StringBuilder()
-                .AppendLine(title)
-                .AppendLine($"Updated: {updated:d}")
-                .AppendLine()
-                .AppendLine($"Q: {urlQ}")
-                .AppendLine($"A: {urlA}");
+            //pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)Q"">";
+            pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/\d*\/\d*\/)Q"">";
+            m = new Regex(pattern).Match(section);
+            if (m.Success)
+            {
+                urlQ = url + m.Result("${url}") + "Q";
+                StoreFile(num, title, updated, "Q", urlQ, path);
+            }
 
-            /*
-            Ответ ДФМиВК от 16.04.2018 № 12-3-5/2688 на запрос КО
-            Updated: 18.12.2018
+            pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/\d*\/\d*\/)A"">";
+            m = new Regex(pattern).Match(section);
+            if (m.Success)
+            {
+                urlA = url + m.Result("${url}") + "A";
+                StoreFile(num, title, updated, "A", urlA, path);
+            }
 
-            Q: http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/Q (optional)
-            A: http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/A (optional)
-            */
+            if (urlQ == null && urlA == null)
+            {
+                throw new Exception($"HTML {uri} изменился в {num} \"{title}\" - не определить линк(и).");
+            }
 
-            File.WriteAllText(Path.Combine(path, item + ".info"), sb.ToString());
-
-            StoreFile(urlQ, path);
-            StoreFile(urlA, path);
+            Console.WriteLine($"  {updated:yyyy-MM-dd}: {title}");
         }
 
-        private static void StoreFile(string uri, string path)
+        private static void StoreFile(string num, string title, DateTime updated, string QA, string uri, string path)
         {
             if (uri == null)
             {
@@ -247,15 +222,29 @@ namespace WebFileMirror
 
             var info = new StringBuilder();
             var headers = GetHeaders(uri);
+
             string file = Path.Combine(path, GetFileName(headers["Content-Disposition"]));
+            string fileinfo = $"{file}.{QA}.info";
             long size = long.Parse(headers["Content-Length"]);
+
+            /*
+            25: Ответ ДФМиВК от 16.04.2018 № 12-3-5/2688 на запрос КО
+            Updated: 18.12.2018
+            http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/Q
+            */
 
             var fi = new FileInfo(file);
             if (!fi.Exists)
             {
                 _client.DownloadFile(uri, file);
-                info.AppendLine(uri).Append(headers);
-                File.WriteAllText(file + ".info", info.ToString());
+
+                info.AppendLine($"{num}: {title}")
+                    .AppendLine($"Updated: {updated:d}")
+                    .AppendLine(uri)
+                    .AppendLine()
+                    .Append(headers);
+
+                File.WriteAllText(fileinfo, info.ToString());
             }
             else if (fi.Length != size) //TODO new update
             {
@@ -267,8 +256,17 @@ namespace WebFileMirror
                 while (File.Exists(file));
 
                 _client.DownloadFile(uri, file);
-                info.AppendLine($"-{n}-").Append(headers);
-                File.AppendAllText(file + ".info", info.ToString());
+
+                info.AppendLine()
+                    .AppendLine($"-{n}-")
+                    .AppendLine()
+                    .AppendLine($"{num}: {title}")
+                    .AppendLine($"Updated: {updated:d}")
+                    .AppendLine(uri)
+                    .AppendLine()
+                    .Append(headers);
+
+                File.AppendAllText(fileinfo, info.ToString());
             }
         }
 
@@ -276,6 +274,7 @@ namespace WebFileMirror
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
             request.Method = "HEAD";
+
             using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
             {
                 return response.Headers;
@@ -317,7 +316,7 @@ namespace WebFileMirror
         {
 #if DEBUG
             string file = GetValidFileName(uri) + ".html";
-            if (File.Exists(file))
+            if (File.Exists(file) && File.GetCreationTime(file).Date.Equals(DateTime.Now.Date))
             {
                 return File.ReadAllText(file, Encoding.UTF8);
             }
@@ -325,11 +324,31 @@ namespace WebFileMirror
             {
                 string page = _client.DownloadString(uri);
                 File.WriteAllText(file, page, Encoding.UTF8);
+
                 return page;
             }
 #else
             return _client.DownloadString(uri);
 #endif
+        }
+
+        private static string GetSection(string uri, string page, string start, string finish)
+        {
+            int iStart = page.IndexOf(start);
+            if (iStart == -1)
+            {
+                throw new Exception($"HTML страницы {uri} изменился - начало секции не найдено.");
+            }
+
+            int iFinish = page.IndexOf(finish, iStart + start.Length);
+            if (iFinish == -1)
+            {
+                throw new Exception($"HTML страницы {uri} изменился - конец секции не найден.");
+            }
+
+            string section = page.Substring(iStart, iFinish - iStart);
+
+            return section;
         }
 
         private static string GetValidFileName(string uri)
