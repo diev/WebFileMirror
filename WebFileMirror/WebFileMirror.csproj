@@ -45,11 +45,23 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Lib\App.cs" />
+    <Compile Include="Lib\AppConsoleListener.cs" />
+    <Compile Include="Lib\AppEMailListener.cs" />
+    <Compile Include="Lib\AppExit.cs" />
+    <Compile Include="Lib\AppLogFileListener.cs" />
+    <Compile Include="Lib\AppTrace.cs" />
+    <Compile Include="Lib\IOChecks.cs" />
+    <Compile Include="Lib\Mailer.cs" />
+    <Compile Include="Lib\Password.cs" />
+    <Compile Include="Lib\Pinger.cs" />
+    <Compile Include="Lib\StringExtension.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

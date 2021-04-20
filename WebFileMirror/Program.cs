@@ -15,8 +15,11 @@
 //------------------------------------------------------------------------------
 #endregion
 
+using Lib;
+
 using System;
 using System.Configuration;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -31,6 +34,27 @@ namespace WebFileMirror
         static void Main(string[] args)
         {
             var settings = ConfigurationManager.AppSettings;
+            var admin = settings["Admin"];
+
+            foreach (string arg in args)
+            {
+                switch (arg.ToLower())
+                {
+                    case "v":
+                        Console.WriteLine($"{App.Version} running...");
+                        AppTrace.TraceSource.Switch.Level = SourceLevels.All;
+                        break;
+
+                    case "t":
+                        Console.WriteLine($"Sending a test mail to {admin}...");
+                        Mailer.Send(admin, "Тест отправки почты!", "Test");
+                        Console.WriteLine("Press Esc to exit");
+                        Console.ReadKey();
+                        AppExit.Information("Тест почты завершен.");
+                        break;
+                }
+            }
+
             var uri = settings["Uri"];
             var mirror = settings["Mirror"];
 
@@ -41,6 +65,7 @@ namespace WebFileMirror
 
             Crawler1(uri, mirror);
 
+            Mailer.FinalDelivery(2);
             Console.WriteLine("Press Enter to exit.");
             Console.ReadLine();
         }
