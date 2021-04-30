@@ -36,7 +36,7 @@ namespace Lib
         {
             AppTrace.Verbose("Mailer start...");
 
-            Signature = $"Вы подписаны на получение извещений из {App.Name}.";
+            Signature = $"Вы подписаны на получение извещений из {App.Version}.";
 
             //http://stackoverflow.com/questions/454277/how-to-enable-ssl-for-smtpclient-in-web-config
             //http://www.codeproject.com/dotnet/mysteriesofconfiguration.asp
@@ -123,7 +123,7 @@ namespace Lib
         const string FilesSeparator = ",;";
 
         static SmtpClient Client = null;
-        static SmtpDeliveryMethod method;
+        static readonly SmtpDeliveryMethod method;
 
         // SmtpDeliveryMethod.Network
         static readonly string host;
@@ -152,19 +152,29 @@ namespace Lib
         {
             AppTrace.Verbose("SMTP start...");
 
+            if (ssl)
+            {
+                ServicePointManager.ServerCertificateValidationCallback = 
+                    new System.Net.Security.RemoteCertificateValidationCallback(RemoteServerCertificateValidationCallback);
+            }
+
             switch (method)
             {
                 case SmtpDeliveryMethod.Network:
-                    Client = new SmtpClient(host, port);
-                    Client.UseDefaultCredentials = false;
-                    Client.Credentials = new NetworkCredential(user, pass);
-                    Client.EnableSsl = ssl;
+                    Client = new SmtpClient(host, port)
+                    {
+                        UseDefaultCredentials = false,
+                        Credentials = new NetworkCredential(user, pass),
+                        EnableSsl = ssl
+                    };
                     // Client.Timeout = Timeout * 1000; // Ignored for Async
                     break;
 
                 case SmtpDeliveryMethod.SpecifiedPickupDirectory:
-                    Client = new SmtpClient();
-                    Client.PickupDirectoryLocation = path;
+                    Client = new SmtpClient
+                    {
+                        PickupDirectoryLocation = path
+                    };
                     break;
             }
 
@@ -446,6 +456,25 @@ namespace Lib
             IsReady = true;
 
             Delivery();
+        }
+
+        /// <summary>
+        /// A callback routine to validate the server's certificate.
+        /// </summary>
+        /// <param name="sender">The object sender.</param>
+        /// <param name="certificate"></param>
+        /// <param name="chain"></param>
+        /// <param name="sslPolicyErrors"></param>
+        /// <returns>The server is valid</returns>
+        private static bool RemoteServerCertificateValidationCallback(object sender, 
+            System.Security.Cryptography.X509Certificates.X509Certificate certificate, 
+            System.Security.Cryptography.X509Certificates.X509Chain chain, 
+            System.Net.Security.SslPolicyErrors sslPolicyErrors)
+        {
+            //Console.WriteLine(certificate);
+            AppTrace.Verbose(certificate.ToString());
+
+            return true; //TODO check if valid
         }
 
         //class StatusChecker

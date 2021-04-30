@@ -34,7 +34,7 @@ namespace WebFileMirror
         static void Main(string[] args)
         {
             var settings = ConfigurationManager.AppSettings;
-            var admin = settings["Admin"];
+            Mailer.Admin = settings["Admin"];
 
             foreach (string arg in args)
             {
@@ -46,10 +46,7 @@ namespace WebFileMirror
                         break;
 
                     case "t":
-                        Console.WriteLine($"Sending a test mail to {admin}...");
-                        Mailer.Send(admin, "Тест отправки почты!", "Test");
-                        Console.WriteLine("Press Esc to exit");
-                        Console.ReadKey();
+                        Mailer.SendAlert("Test");
                         AppExit.Information("Тест почты завершен.");
                         break;
                 }
@@ -60,14 +57,26 @@ namespace WebFileMirror
 
             if (!Directory.Exists(mirror))
             {
+                AppTrace.Verbose($"MkDir {mirror}");
                 Directory.CreateDirectory(mirror);
             }
 
-            Crawler1(uri, mirror);
+            try
+            {
+                Crawler1(uri, mirror);
+            }
+            catch (Exception ex)
+            {
+                Mailer.SendAlert(ex.Message);
+                AppTrace.Error(ex.Message);
+            }
 
             Mailer.FinalDelivery(2);
-            Console.WriteLine("Press Enter to exit.");
-            Console.ReadLine();
+            if (settings["WaitClose"].Equals("1"))
+            {
+                Console.WriteLine("Press Enter to exit.");
+                Console.ReadLine();
+            }
         }
 
         private static void Crawler1(string uri, string path)
@@ -93,7 +102,8 @@ namespace WebFileMirror
 
             if (matches.Count == 0)
             {
-                throw new Exception($"HTML {uri} изменился - найдено 0 линков.");
+                string msg = $"HTML {uri} изменился - найдено 0 линков.";
+                throw new Exception(msg);
             }
 
             foreach (Match m in matches)
@@ -101,11 +111,12 @@ namespace WebFileMirror
                 string url = m.Result("${url}");
                 string title = m.Result("${title}");
 
-                Console.WriteLine(title);
+                AppTrace.Information(title);
                 string dir = Path.Combine(path, title);
 
                 if (!Directory.Exists(dir))
                 {
+                    AppTrace.Verbose($"MkDir {dir}");
                     Directory.CreateDirectory(dir);
                 }
 
@@ -185,7 +196,8 @@ namespace WebFileMirror
             }
             else
             {
-                throw new Exception($"HTML {uri} изменился - не определить номер вопроса.");
+                string msg = $"HTML {uri} изменился - не определить номер вопроса.";
+                throw new Exception(msg);
             }
 
             pattern = @"<div class=""question_title"">(?<title>.+)<\/div>";
@@ -196,7 +208,8 @@ namespace WebFileMirror
             }
             else
             {
-                throw new Exception($"HTML {uri} изменился - не определить название вопроса {num}.");
+                string msg = $"HTML {uri} изменился - не определить название вопроса {num}.";
+                throw new Exception(msg);
             }
 
             pattern = @"Дата последнего обновления: (?<date>\d{2}\.\d{2}\.\d{4})";
@@ -207,10 +220,12 @@ namespace WebFileMirror
             }
             else
             {
-                throw new Exception($"HTML {uri} изменился в {num} \"{title}\" - не определить дату последнего обновления.");
+                string msg = $"HTML {uri} изменился в {num} \"{title}\" - не определить дату последнего обновления.";
+                throw new Exception(msg);
             }
 
             path = Path.Combine(path, $"{updated:yyyy-MM-dd} {GetValidFileName(title)}");
+            AppTrace.Verbose($"MkDir {path}");
             Directory.CreateDirectory(path);
 
             //pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)Q"">";
@@ -232,10 +247,11 @@ namespace WebFileMirror
 
             if (urlQ == null && urlA == null)
             {
-                throw new Exception($"HTML {uri} изменился в {num} \"{title}\" - не определить линк(и).");
+                string msg = $"HTML {uri} изменился в {num} \"{title}\" - не определить линк(и).";
+                throw new Exception(msg);
             }
 
-            Console.WriteLine($"  {updated:yyyy-MM-dd}: {title}");
+            AppTrace.Information($"  {updated:yyyy-MM-dd}: {title}");
         }
 
         private static void StoreFile(string num, string title, DateTime updated, string QA, string uri, string path)
@@ -249,7 +265,7 @@ namespace WebFileMirror
             var headers = GetHeaders(uri);
 
             string file = Path.Combine(path, GetFileName(headers["Content-Disposition"]));
-            string fileinfo = $"{file}.{QA}.info";
+            string fileinfo = $"{file}.{QA}.txt";
             long size = long.Parse(headers["Content-Length"]);
 
             /*
@@ -267,9 +283,27 @@ namespace WebFileMirror
                     .AppendLine($"Updated: {updated:d}")
                     .AppendLine(uri)
                     .AppendLine()
-                    .Append(headers);
+                    .Append(headers)
+                    .AppendLine()
+                    .AppendLine(file);
 
-                File.WriteAllText(fileinfo, info.ToString());
+                string msg = info.ToString();
+                AppTrace.Information($"[New] {file}");
+
+                try
+                {
+                    File.WriteAllText(fileinfo, msg);
+                }
+                catch (Exception ex)
+                {
+                    string m = $"Невозможно записать файл {fileinfo}!";
+                    AppTrace.Error(m);
+                    Mailer.SendAlert(m + "\n" + ex.Message);
+                }
+
+                var settings = ConfigurationManager.AppSettings;
+                var to = settings["Subscribers"];
+                Mailer.Send(to, $"Новый ({updated:d}) {title} ({QA})", msg, file);
             }
             else if (fi.Length != size) //TODO new update
             {
@@ -289,10 +323,32 @@ namespace WebFileMirror
                     .AppendLine($"Updated: {updated:d}")
                     .AppendLine(uri)
                     .AppendLine()
-                    .Append(headers);
+                    .Append(headers)
+                    .AppendLine()
+                    .AppendLine(file);
 
-                File.AppendAllText(fileinfo, info.ToString());
+                string msg = info.ToString();
+                AppTrace.Information($"[Changed] {file}");
+
+                try
+                {
+                    File.AppendAllText(fileinfo, msg);
+                }
+                catch (Exception ex)
+                {
+                    string m = $"Невозможно дописать файл {fileinfo}!";
+                    AppTrace.Error(m);
+                    Mailer.SendAlert(m + Environment.NewLine + ex.Message);
+                }
+
+                var settings = ConfigurationManager.AppSettings;
+                var to = settings["Subscribers"];
+                Mailer.Send(to, $"Изменен ({updated:d}) {title} ({QA})", msg, file);
             }
+            //else
+            //{
+            //    AppTrace.Verbose($"{file} ok");
+            //}
         }
 
         private static WebHeaderCollection GetHeaders(string uri)
@@ -329,12 +385,15 @@ namespace WebFileMirror
             Match m = new Regex("filename=(?<filename>.*);").Match(contentDisposition);
             if (m.Success)
             {
-                return m.Result("${filename}");
+                string filename = m.Result("${filename}");
+                if (filename.Length > 0)
+                {
+                    return filename;
+                }
             }
-            else
-            {
-                throw new Exception($"Сервер изменился - невозможно определить имя файла.");
-            }
+            
+            string msg = $"Сервер изменился - невозможно определить имя файла.";
+            throw new Exception(msg);
         }
 
         private static string GetPage(string uri)
@@ -345,13 +404,11 @@ namespace WebFileMirror
             {
                 return File.ReadAllText(file, Encoding.UTF8);
             }
-            else
-            {
-                string page = _client.DownloadString(uri);
-                File.WriteAllText(file, page, Encoding.UTF8);
 
-                return page;
-            }
+            string page = _client.DownloadString(uri);
+            File.WriteAllText(file, page, Encoding.UTF8);
+
+            return page;
 #else
             return _client.DownloadString(uri);
 #endif
@@ -362,13 +419,15 @@ namespace WebFileMirror
             int iStart = page.IndexOf(start);
             if (iStart == -1)
             {
-                throw new Exception($"HTML страницы {uri} изменился - начало секции не найдено.");
+                string msg = $"HTML страницы {uri} изменился - начало секции не найдено.";
+                throw new Exception(msg);
             }
 
             int iFinish = page.IndexOf(finish, iStart + start.Length);
             if (iFinish == -1)
             {
-                throw new Exception($"HTML страницы {uri} изменился - конец секции не найден.");
+                string msg = $"HTML страницы {uri} изменился - конец секции не найден.";
+                throw new Exception(msg);
             }
 
             string section = page.Substring(iStart, iFinish - iStart);
