@@ -46,7 +46,7 @@ install:
 
     Write-Host "Building v$env:APPVEYOR_BUILD_VERSION dated $env:BuildDate"
 build:
-  project: $(appveyor_project_name).sln
+  project: $(appveyor_project_name)\$(appveyor_project_name).sln
   verbosity: minimal
 before_package:
 - cmd: >-
