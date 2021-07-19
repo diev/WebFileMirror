@@ -24,6 +24,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace WebFileMirror
 {
@@ -89,7 +90,34 @@ namespace WebFileMirror
 
             _client.BaseAddress = uri;
             _client.Encoding = Encoding.UTF8;
-            string page = GetPage(uri);
+
+            string page = null;
+            int tries = 10;
+
+            while (--tries > 0)
+            {
+                page = GetPage(uri);
+                if (page.Contains("</html>"))
+                {
+                    Console.WriteLine("ok");
+                    break;
+                }
+
+                Console.Write('.');
+                Thread.Sleep(2000);
+            }
+
+            if (tries == 0 || page == null)
+            {
+                string msg = $"Страница {uri} не получена.";
+                throw new Exception(msg);
+            }
+
+            if (page.Contains("<title>Access Denied"))
+            {
+                string msg = $"Страница {uri} заблокирована на Proxy.";
+                throw new Exception(msg);
+            }
 
             string start = "<h2 class=\"h3\">КО</h2>";
             string finish = "<h2 class=\"h3\">НФО</h2>";
@@ -419,14 +447,14 @@ namespace WebFileMirror
             int iStart = page.IndexOf(start);
             if (iStart == -1)
             {
-                string msg = $"HTML страницы {uri} изменился - начало секции не найдено.";
+                string msg = $"HTML страницы {uri} изменился - начало секции \'{start}\' не найдено.";
                 throw new Exception(msg);
             }
 
             int iFinish = page.IndexOf(finish, iStart + start.Length);
             if (iFinish == -1)
             {
-                string msg = $"HTML страницы {uri} изменился - конец секции не найден.";
+                string msg = $"HTML страницы {uri} изменился - конец секции \'{finish}\' не найден.";
                 throw new Exception(msg);
             }
 

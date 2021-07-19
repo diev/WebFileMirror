@@ -112,12 +112,30 @@ namespace Lib
                 dt = string.Format(format, DateTime.Now, Attributes["verbose"]);
             }
 
-            File.AppendAllText(_fileName, dt, Encoding.GetEncoding(1251));
+            try
+            {
+                File.AppendAllText(_fileName, dt, Encoding.GetEncoding(1251));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(dt);
+                Console.WriteLine($"Ошибка записи в лог {_fileName}");
+                Console.WriteLine(ex);
+            }
         }
 
         public override void WriteLine(string message)
         {
-            File.AppendAllText(_fileName, message + Environment.NewLine, Encoding.GetEncoding(1251));
+            try
+            {
+                File.AppendAllText(_fileName, message + Environment.NewLine, Encoding.GetEncoding(1251));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(message);
+                Console.WriteLine($"Ошибка записи в лог {_fileName}");
+                Console.WriteLine(ex);
+            }
         }
 
         protected override string[] GetSupportedAttributes()
