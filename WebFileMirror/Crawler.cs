@@ -407,7 +407,9 @@ namespace WebFileMirror
 
                     if (page != null && page.Contains("</html>"))
                     {
+#if DEBUG
                         File.WriteAllText(file, page, Encoding.UTF8);
+#endif
 
                         return page;
                     }
