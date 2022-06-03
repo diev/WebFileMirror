@@ -1,12 +1,14 @@
 ﻿#region License
 //------------------------------------------------------------------------------
-// Copyright (c) Dmitrii Evdokimov
-// Source https://github.com/diev/
+// Copyright (c) 2022 Dmitrii Evdokimov
+// Open source https://github.com/diev/
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
+//
+//     https://apache.org/licenses/LICENSE-2.0
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,6 +30,9 @@ namespace WebFileMirror
     {
         internal static void Main(string[] args)
         {
+            Console.WriteLine(App.Version);
+            Console.WriteLine(App.Description);
+
             var settings = ConfigurationManager.AppSettings;
             Mailer.Admin = settings["Admin"];
 
@@ -36,7 +41,7 @@ namespace WebFileMirror
                 switch (arg.ToLower())
                 {
                     case "v":
-                        Console.WriteLine($"{App.Version} running...");
+                        Console.WriteLine("Verbose running...");
                         AppTrace.TraceSource.Switch.Level = SourceLevels.All;
                         break;
 
@@ -55,6 +60,8 @@ namespace WebFileMirror
                 AppTrace.Verbose($"MkDir {mirror}");
                 Directory.CreateDirectory(mirror);
             }
+
+            Console.WriteLine("Попытка соединиться...");
 
             try
             {

@@ -1,12 +1,14 @@
 ﻿#region License
 //------------------------------------------------------------------------------
-// Copyright (c) Dmitrii Evdokimov
-// Source https://github.com/diev/
+// Copyright (c) 2022 Dmitrii Evdokimov
+// Open source https://github.com/diev/
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
+//
+//     https://apache.org/licenses/LICENSE-2.0
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -52,21 +54,46 @@ namespace WebFileMirror
             }
         }
 
-        internal static string GetSection(string uri, string page, string start, string finish)
+        internal static int GetSectionStart(string uri, string page, string startPattern)
         {
-            int iStart = page.IndexOf(start);
+            int i = page.IndexOf(startPattern);
 
-            if (iStart == -1)
+            if (i == -1)
             {
-                string msg = $"HTML страницы {uri} изменился - начало секции \'{start}\' не найдено.";
+                string msg = $"HTML страницы {uri} изменился - начало секции \'{startPattern}\' не найдено.";
                 throw new Exception(msg);
             }
 
-            int iFinish = page.IndexOf(finish, iStart + start.Length);
+            return i + startPattern.Length;
+        }
+        internal static int GetSectionLength(string uri, string page, int startAt, string finishPattern)
+        {
+            int i = page.IndexOf(finishPattern, startAt);
+
+            if (i == -1)
+            {
+                string msg = $"HTML страницы {uri} изменился - конец секции \'{finishPattern}\' не найден.";
+                throw new Exception(msg);
+            }
+
+            return i - startAt;
+        }
+
+        internal static string GetSection(string uri, string page, string startPattern, string finishPattern)
+        {
+            int iStart = page.IndexOf(startPattern);
+
+            if (iStart == -1)
+            {
+                string msg = $"HTML страницы {uri} изменился - начало секции \'{startPattern}\' не найдено.";
+                throw new Exception(msg);
+            }
+
+            int iFinish = page.IndexOf(finishPattern, iStart + startPattern.Length);
 
             if (iFinish == -1)
             {
-                string msg = $"HTML страницы {uri} изменился - конец секции \'{finish}\' не найден.";
+                string msg = $"HTML страницы {uri} изменился - конец секции \'{finishPattern}\' не найден.";
                 throw new Exception(msg);
             }
 

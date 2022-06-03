@@ -1,12 +1,14 @@
 ﻿#region License
 //------------------------------------------------------------------------------
-// Copyright (c) Dmitrii Evdokimov
-// Source https://github.com/diev/
+// Copyright (c) 2022 Dmitrii Evdokimov
+// Open source https://github.com/diev/
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
+//
+//     https://apache.org/licenses/LICENSE-2.0
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -29,26 +31,70 @@ namespace WebFileMirror
 {
     internal static class Crawler
     {
+        // Microsoft Edge 102.0.1245.30
+        const string _userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36 Edg/102.0.1245.30";
+        const string _accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9";
+
+
+        // Pass1 - get href[] at https://cbr.ru/explan/pcod/?tab.current=t2
+        const string _start1 = "<h2 class=\"h3\">КО</h2>";
+        const string _finish1 = "<h2 class=\"h3\">НФО</h2>";
+
+        const string _href1 = @"<a .*href=""(?<url>doc\?number=\d*)"">(?<title>.*)<\/a>";
+
+        // Pass2 - get section[] at https://cbr.ru/explan/pcod/doc?number=40
+        const string _start2 = "<div class=\"dropdown question\">";
+        const string _finish2 = "<div class=\"page-info\">";
+
+        // Pass3 - get data at https://cbr.ru/explan/pcod/doc?number=40
+        const string _num3 = @"<div class=""question_num"">(?<num>.+)<\/div>";
+        const string _title3 = @"<div class=""question_title"">(?<title>.+)<\/div>";
+        const string _date3 = @"Дата последнего обновления: (?<date>\d{2}\.\d{2}\.\d{4})";
+        const string _urlQ3 = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/\d*\/\d*\/)Q"">";
+        const string _urlA3 = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/\d*\/\d*\/)A"">";
+
+        // Regex
+        static readonly Regex _href = new Regex(_href1, RegexOptions.Compiled);
+        static readonly Regex _num = new Regex(_num3, RegexOptions.Compiled);
+        static readonly Regex _title = new Regex(_title3, RegexOptions.Compiled);
+        static readonly Regex _date = new Regex(_date3, RegexOptions.Compiled);
+        static readonly Regex _urlQ = new Regex(_urlQ3, RegexOptions.Compiled);
+        static readonly Regex _urlA = new Regex(_urlA3, RegexOptions.Compiled);
+
+        // Retries
+        const int _tries = 10;
+        const int _wait = 2000;
+
         static readonly WebClient _client = new WebClient();
+        static readonly DateTime _today = DateTime.Now.Date;
+
+        static readonly string _subsribers;
+        static string _lastError = null;
 
         static Crawler()
         {
-            // Microsoft Edge 102.0.1245.30
-            const string ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36 Edg/102.0.1245.30";
-
-            _client.Headers.Add(HttpRequestHeader.Accept, "*/*");
-            _client.Headers.Add(HttpRequestHeader.AcceptEncoding, "gzip,deflate");
-            _client.Headers.Add(HttpRequestHeader.AcceptLanguage, "ru,en");
-            _client.Headers.Add(HttpRequestHeader.CacheControl, "max-age=0");
-            _client.Headers.Add(HttpRequestHeader.Connection, "keep-alive");
-            _client.Headers.Add(HttpRequestHeader.UserAgent, ua);
+            _client.Headers.Set(HttpRequestHeader.UserAgent, _userAgent);
+            _client.Headers.Set(HttpRequestHeader.Accept, _accept);
 
             _client.Encoding = Encoding.UTF8;
+
+            var settings = ConfigurationManager.AppSettings;
+            string proxy = settings["Proxy"];
+
+            if (!string.IsNullOrEmpty(proxy))
+            {
+                _client.Proxy = new WebProxy(proxy)
+                {
+                    //Credentials = CredentialCache.DefaultCredentials
+                };
+            }
+
+            _subsribers = settings["Subscribers"];
         }
 
         internal static void Pass1(string uri, string path)
         {
-            /* HTML http://www.cbr.ru/explan/pcod/?tab.current=t2
+            /* HTML https://cbr.ru/explan/pcod/?tab.current=t2
             <div class="rubric_horizontal">
                 <div class="col-md-3 rubric_sub">1&nbsp;запрос</div>
                 <a class="col-md-19 offset-md-1 rubric_title" href="doc?number=40">Вопросы по Инструкции № 136-И</a>
@@ -56,26 +102,22 @@ namespace WebFileMirror
 
             _client.BaseAddress = uri;
 
-            string page = null;
-            int tries = 10;
+            string page = GetPage(uri);
 
-            while (--tries > 0)
-            {
-                page = GetPage(uri);
-
-                if (page.Contains("</html>"))
-                {
-                    Console.WriteLine("ok");
-                    break;
-                }
-
-                Console.Write('.');
-                Thread.Sleep(2000);
-            }
-
-            if (tries == 0 || page == null)
+            if (page == null)
             {
                 string msg = $"Страница {uri} не получена.";
+
+                if (_lastError != null)
+                {
+                    msg += " " + _lastError;
+                }
+
+                if (_client.Proxy != null)
+                {
+                    msg += " Проверьте также настройки Proxy.";
+                }
+
                 throw new Exception(msg);
             }
 
@@ -85,15 +127,8 @@ namespace WebFileMirror
                 throw new Exception(msg);
             }
 
-            const string start = "<h2 class=\"h3\">КО</h2>";
-            const string finish = "<h2 class=\"h3\">НФО</h2>";
-
-            string section = Helper.GetSection(uri, page, start, finish);
-
-            const string pattern = @"<a .*href=""(?<url>doc\?number=\d*)"">(?<title>.*)<\/a>";
-
-            var hrefs = new Regex(pattern);
-            var matches = hrefs.Matches(section);
+            string section = Helper.GetSection(uri, page, _start1, _finish1);
+            var matches = _href.Matches(section);
 
             if (matches.Count == 0)
             {
@@ -121,22 +156,23 @@ namespace WebFileMirror
 
         private static void Pass2(string uri, string path)
         {
-            /* HTML http://www.cbr.ru/explan/pcod/doc?number=40
+            /* HTML https://cbr.ru/explan/pcod/doc?number=40
             <div class="dropdown question">...</div> */
 
             string page = GetPage(uri);
 
-            const string start = "<div class=\"dropdown question\">";
-            const string finish = "<div class=\"page-info\">";
+            if (page == null)
+            {
+                return;
+            }
 
-            string section = Helper.GetSection(uri, page, start, finish);
+            string section = Helper.GetSection(uri, page, _start2, _finish2);
             int iStart = 0;
-
             bool isNext = true;
 
             while (isNext)
             {
-                int iFinish = section.IndexOf(start, iStart + start.Length);
+                int iFinish = section.IndexOf(_start2, iStart + _start2.Length);
 
                 if (iFinish == -1)
                 {
@@ -153,7 +189,7 @@ namespace WebFileMirror
 
         private static void Pass3(string uri, string section, string path)
         {
-            /* HTML http://www.cbr.ru/explan/pcod/doc?number=40
+            /* HTML https://cbr.ru/explan/pcod/doc?number=40
             <div class="dropdown question">
               <div class="dropdown_title">
                 <div class="question_num">02</div>
@@ -178,19 +214,11 @@ namespace WebFileMirror
             </div> */
 
             string num;
-            string title;
-            DateTime updated;
+            var match = _num.Match(section);
 
-            const string url = "http://www.cbr.ru";
-            string urlQ = null;
-            string urlA = null;
-
-            string pattern = @"<div class=""question_num"">(?<num>.+)<\/div>";
-            Match m = new Regex(pattern).Match(section);
-
-            if (m.Success)
+            if (match.Success)
             {
-                num = m.Result("${num}");
+                num = match.Result("${num}");
             }
             else
             {
@@ -198,12 +226,12 @@ namespace WebFileMirror
                 throw new Exception(msg);
             }
 
-            pattern = @"<div class=""question_title"">(?<title>.+)<\/div>";
-            m = new Regex(pattern).Match(section);
+            string title;
+            match = _title.Match(section);
 
-            if (m.Success)
+            if (match.Success)
             {
-                title = m.Result("${title}");
+                title = match.Result("${title}");
             }
             else
             {
@@ -211,12 +239,12 @@ namespace WebFileMirror
                 throw new Exception(msg);
             }
 
-            pattern = @"Дата последнего обновления: (?<date>\d{2}\.\d{2}\.\d{4})";
-            m = new Regex(pattern).Match(section);
+            DateTime updated;
+            match = _date.Match(section);
 
-            if (m.Success)
+            if (match.Success)
             {
-                updated = DateTime.Parse(m.Result("${date}"));
+                updated = DateTime.Parse(match.Result("${date}"));
             }
             else
             {
@@ -230,22 +258,24 @@ namespace WebFileMirror
             AppTrace.Verbose($"MkDir {path}");
             Directory.CreateDirectory(path);
 
-            //pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/(?<folder>\d*)\/(?<file>\d*)\/)Q"">";
-            pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/\d*\/\d*\/)Q"">";
-            m = new Regex(pattern).Match(section);
+            var u = new Uri(_client.BaseAddress);
+            string url = $"{u.Scheme}://{u.Host}";
 
-            if (m.Success)
+            string urlQ = null;
+            match = _urlQ.Match(section);
+
+            if (match.Success)
             {
-                urlQ = url + m.Result("${url}") + "Q";
+                urlQ = url + match.Result("${url}") + "Q";
                 StoreFile(num, title, updated, "Q", urlQ, path);
             }
 
-            pattern = @"<a .*href=""(?<url>\/Queries\/UniDbQuery\/File\/\d*\/\d*\/)A"">";
-            m = new Regex(pattern).Match(section);
+            string urlA = null;
+            match = _urlA.Match(section);
 
-            if (m.Success)
+            if (match.Success)
             {
-                urlA = url + m.Result("${url}") + "A";
+                urlA = url + match.Result("${url}") + "A";
                 StoreFile(num, title, updated, "A", urlA, path);
             }
 
@@ -260,11 +290,6 @@ namespace WebFileMirror
 
         private static void StoreFile(string num, string title, DateTime updated, string QA, string uri, string path)
         {
-            if (uri == null)
-            {
-                return;
-            }
-
             var info = new StringBuilder();
             var headers = Helper.GetHeaders(uri);
 
@@ -275,7 +300,7 @@ namespace WebFileMirror
             /*
             25: Ответ ДФМиВК от 16.04.2018 № 12-3-5/2688 на запрос КО
             Updated: 18.12.2018
-            http://www.cbr.ru/Queries/UniDbQuery/File/104594/72/Q
+            https://cbr.ru/Queries/UniDbQuery/File/104594/72/Q
             */
 
             var fi = new FileInfo(file);
@@ -304,13 +329,10 @@ namespace WebFileMirror
                     string m = $"Невозможно записать файл {fileinfo}!";
 
                     AppTrace.Error(m);
-                    Mailer.SendAlert(m + "\n" + ex.Message);
+                    Mailer.SendAlert(m + Environment.NewLine + ex.Message);
                 }
 
-                var settings = ConfigurationManager.AppSettings;
-                var to = settings["Subscribers"];
-
-                Mailer.Send(to, $"Новый ({updated:d}) {title} ({QA})", msg, file);
+                Mailer.Send(_subsribers, $"Новый ({updated:d}) {title} ({QA})", msg, file);
             }
             else if (fi.Length != size) //TODO new update
             {
@@ -323,7 +345,10 @@ namespace WebFileMirror
                 }
                 while (File.Exists(file));
 
-                _client.DownloadFile(uri, file);
+                if (!GetFile(uri, file))
+                {
+                    return;
+                }
 
                 info.AppendLine()
                     .AppendLine($"-{n}-")
@@ -351,10 +376,7 @@ namespace WebFileMirror
                     Mailer.SendAlert(m + Environment.NewLine + ex.Message);
                 }
 
-                var settings = ConfigurationManager.AppSettings;
-                var to = settings["Subscribers"];
-
-                Mailer.Send(to, $"Изменен ({updated:d}) {title} ({QA})", msg, file);
+                Mailer.Send(_subsribers, $"Изменен ({updated:d}) {title} ({QA})", msg, file);
             }
             //else
             //{
@@ -366,19 +388,70 @@ namespace WebFileMirror
         {
 #if DEBUG
             string file = Helper.GetValidFileName(uri) + ".html";
+            bool today = File.GetCreationTime(file).Date.Equals(_today);
 
-            if (File.Exists(file) && File.GetCreationTime(file).Date.Equals(DateTime.Now.Date))
+            if (File.Exists(file) && today)
             {
                 return File.ReadAllText(file, Encoding.UTF8);
             }
-
-            string page = _client.DownloadString(uri);
-            File.WriteAllText(file, page, Encoding.UTF8);
-
-            return page;
-#else
-            return _client.DownloadString(uri);
 #endif
+
+            _lastError = null;
+            int tries = _tries;
+
+            while (--tries > 0)
+            {
+                try
+                {
+                    string page = _client.DownloadString(uri);
+
+                    if (page != null && page.Contains("</html>"))
+                    {
+                        File.WriteAllText(file, page, Encoding.UTF8);
+
+                        return page;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _lastError = ex.Message;
+                }
+
+                Console.Write('.');
+                Thread.Sleep(_wait);
+            }
+
+            throw new Exception(_lastError);
+        }
+
+        private static bool GetFile(string uri, string file)
+        {
+            _lastError = null;
+            int tries = _tries;
+
+            while (--tries > 0)
+            {
+                try
+                {
+                    _client.DownloadFile(uri, file);
+
+                    return File.Exists(file);
+                }
+                catch (Exception ex)
+                {
+                    _lastError = ex.Message;
+
+                    if (File.Exists(file))
+                    {
+                        File.Delete(file);
+                    }
+                }
+
+                Console.Write('.');
+                Thread.Sleep(_wait);
+            }
+
+            throw new Exception(_lastError);
         }
     }
 }

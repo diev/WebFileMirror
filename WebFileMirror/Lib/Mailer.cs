@@ -1,12 +1,14 @@
 ﻿#region License
 //------------------------------------------------------------------------------
-// Copyright (c) Dmitrii Evdokimov
-// Source https://github.com/diev/
+// Copyright (c) 2022 Dmitrii Evdokimov
+// Open source https://github.com/diev/
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
+//
+//     https://apache.org/licenses/LICENSE-2.0
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -36,7 +38,7 @@ namespace Lib
         {
             AppTrace.Verbose("Mailer start...");
 
-            Signature = $"Вы подписаны на получение извещений из {App.Version}.";
+            Signature = $"Вы подписаны на получение извещений из {App.Version} ({Environment.MachineName}).";
 
             //http://stackoverflow.com/questions/454277/how-to-enable-ssl-for-smtpclient-in-web-config
             //http://www.codeproject.com/dotnet/mysteriesofconfiguration.asp
@@ -63,16 +65,19 @@ namespace Lib
             }
 
             method = mailSettings.Smtp.DeliveryMethod;
+
             switch (method)
             {
                 case SmtpDeliveryMethod.Network:
                     SmtpNetworkElement settings = mailSettings.Smtp.Network;
 
                     host = settings.Host;
+
                     if (string.IsNullOrEmpty(host))
                     {
                         throw new ArgumentNullException(host, "No smtp server Host or IP specified");
                     }
+
                     if (!Pinger.TryPing(host, 100))
                     {
                         throw new ArgumentException("Host not pinged", host);
@@ -96,11 +101,13 @@ namespace Lib
                     SmtpSpecifiedPickupDirectoryElement pickup = mailSettings.Smtp.SpecifiedPickupDirectory;
 
                     path = pickup.PickupDirectoryLocation;
+
                     if (path.Contains("{"))
                     {
                         string format = path
                             .Replace("%Now%", "0")
                             .Replace("%App%", "1");
+
                         path = string.Format(format,
                             DateTime.Now,
                             Assembly.GetCallingAssembly().GetName().Name);
@@ -110,6 +117,7 @@ namespace Lib
                     {
                         path = Environment.ExpandEnvironmentVariables(path);
                     }
+
                     IOChecks.CheckDirectory(path);
                     AppTrace.Verbose("See emails in \"{0}\".", path);
                     break;
@@ -209,6 +217,7 @@ namespace Lib
             if (count == 1)
             {
                 Queue.TryDequeue(out drop);
+
                 if (isSent)
                 {
                     AppTrace.Verbose("[{0}] Dequeued sent.", drop.Subject);
@@ -217,6 +226,7 @@ namespace Lib
                 {
                     AppTrace.Warning("[{0}] Dequeued unsent.", drop.Subject);
                 }
+
                 drop.Dispose();
                 return;
             }
@@ -261,10 +271,13 @@ namespace Lib
 
                 email.From = new MailAddress(email.From.Address, App.Name, Encoding.UTF8);
                 email.To.Add(to.Replace(';', ','));
+
                 // email.CC
                 // email.Bcc
                 // email.ReplyToList;
+
                 email.Subject = subj;
+
                 if (string.IsNullOrWhiteSpace(body))
                 {
                     email.Body = Signature;
@@ -273,6 +286,7 @@ namespace Lib
                 {
                     email.Body = body + Environment.NewLine + Signature;
                 }
+
                 // email.BodyEncoding = Encoding.UTF8;
                 // email.IsBodyHtml = true;
                 // email.Priority = MailPriority.High;
@@ -309,6 +323,7 @@ namespace Lib
                 //AppTrace.Information("[{0}] Queued to send.", email.Subject);
                 AppTrace.Verbose("[{0}] to send", email.Subject);
             }
+
             Delivery();
         }
 
@@ -321,6 +336,7 @@ namespace Lib
             {
                 return;
             }
+
             IsReady = false;
 
             if (Client == null)
@@ -364,6 +380,7 @@ namespace Lib
                 for (int i = 0; i < ex.InnerExceptions.Length; i++)
                 {
                     SmtpStatusCode status = ex.InnerExceptions[i].StatusCode;
+
                     if (status == SmtpStatusCode.MailboxBusy ||
                         status == SmtpStatusCode.MailboxUnavailable ||
                         status == SmtpStatusCode.TransactionFailed)
@@ -413,6 +430,7 @@ namespace Lib
         public static void FinalDelivery(int wait)
         {
             DateTime dt = DateTime.Now.AddMinutes(wait);
+
             while (!Queue.IsEmpty)
             {
                 if (DateTime.Now > dt)
@@ -421,10 +439,12 @@ namespace Lib
                     DropQueue();
                     break;
                 }
+
                 Thread.Sleep(1000);
                 AppTrace.Verbose("Final delivery waiting...");
                 Delivery();
             }
+
             Stop();
         }
 
@@ -453,8 +473,8 @@ namespace Lib
                 AppTrace.Information("[{0}] Message sent.", token);
                 DropQueue(1, true);
             }
-            IsReady = true;
 
+            IsReady = true;
             Delivery();
         }
 

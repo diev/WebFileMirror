@@ -9,7 +9,7 @@ Check webpages for updates of hosted files.
 
 Licensed under the [Apache License, Version 2.0].
 
-[WebFileMirror]: http://diev.github.io/WebFileMirror/
+[WebFileMirror]: https://diev.github.io/WebFileMirror/
 [Apache License, Version 2.0]: LICENSE
 
 [appveyor]: https://ci.appveyor.com/project/diev/webfilemirror

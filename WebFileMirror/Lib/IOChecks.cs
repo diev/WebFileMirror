@@ -1,12 +1,14 @@
 ﻿#region License
 //------------------------------------------------------------------------------
-// Copyright (c) Dmitrii Evdokimov
-// Source https://github.com/diev/
+// Copyright (c) 2022 Dmitrii Evdokimov
+// Open source https://github.com/diev/
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// http://www.apache.org/licenses/LICENSE-2.0
+//
+//     https://apache.org/licenses/LICENSE-2.0
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -59,6 +61,7 @@ namespace Lib
                     AppExit.Error(string.Concat("Другая ошибка создания директории ", dir, "\n", ex.Message));
                 }
             }
+
             return dir;
         }
 
@@ -85,13 +88,13 @@ namespace Lib
         public static void TestRights(string path, string msg)
         {
             string file = Path.Combine(path, Path.GetRandomFileName());
+
             try
             {
                 CheckDirectory(path);
                 File.WriteAllText(file, "Test " + file);
                 File.Delete(file);
             }
-
             catch (Exception ex)
             {
                 AppExit.Error(msg + ": " + ex.Message);
