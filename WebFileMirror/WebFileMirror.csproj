@@ -45,6 +45,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Crawler.cs" />
+    <Compile Include="Helper.cs" />
     <Compile Include="Lib\App.cs" />
     <Compile Include="Lib\AppConsoleListener.cs" />
     <Compile Include="Lib\AppEMailListener.cs" />
