@@ -16,4 +16,4 @@ Licensed under the [Apache License, Version 2.0].
 [releases]: https://github.com/diev/WebFileMirror/releases/latest
 
 [Build status]: https://ci.appveyor.com/api/projects/status/u0l6fupl3ptbixas?svg=true
-[GitHub Release]: https://img.shields.io/github/release/diev/WebFileMirror.svg
+[GitHub Release]: https://img.shields.io/github/v/release/diev/WebFileMirror.svg
